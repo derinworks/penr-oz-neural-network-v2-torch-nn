@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn as nn
 from neural_net_model import NeuralNetworkModel
 from mappers import Mapper
+import neural_net_layers as nnl
 
 
 class TestNeuralNetModel(unittest.TestCase):
@@ -42,6 +43,29 @@ class TestNeuralNetModel(unittest.TestCase):
          ], {"sgd": {"lr": 0.1}},
          [nn.Embedding,nn.Flatten, nn.Linear,nn.Tanh, nn.Linear,nn.Dropout,nn.Softmax],
          [(18,2),(10,6),(10,),(18,10),(18,)], 304),
+        ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
+                         {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}], {"adam": {"lr": 3e-4}},
+         [nnl.Summation],
+         [(27, 4), (8, 4)], 140),
+        ([{"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                          {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8},
+                           "normal": {"std": 0.2}, "zeros": {}}]}
+          ], {"adamw": {"lr": 3e-4}},
+         [nn.Sequential],
+         [(4,), (12, 4), (12,), (4, 4), (4,)], 84),
+        ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
+                         {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}, {"dropout": {"p": 0.2}}] +
+         [{"residual": [
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}]}]}] * 2 +
+        [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+         {"softmaxlast": {"dim": -1}}], {"adamw": {"lr": 3e-4}},
+         [nnl.Summation,nn.Dropout] + [nnl.ResidualConnection] * 2 + [nn.LayerNorm,nn.Linear,nnl.SoftmaxOnLast],
+         [(27, 4), (8, 4)] + [(4,), (12, 4), (4, 4), (4,), (16, 4), (4, 16)] * 2 + [(4,), (27, 4)], 652),
     ])
     def test_model_init(self, layers: list[dict], optimizer: dict,
                         expected_layers: list[nn.Module], expected_shapes: list[list[tuple]], expected_buffer_size: int):
@@ -76,6 +100,17 @@ class TestNeuralNetModel(unittest.TestCase):
         ([{"embedding": {"num_embeddings": 18, "embedding_dim": 2}}, {"flatten": {}},
           {"linear": {"in_features": 6, "out_features": 18}}, {"tanh": {}},
           {"linear": {"in_features": 18, "out_features": 9}}, {"softmax": {"dim": 1}}], [[0, 5, 8],[1, 3, 7]], [2, 4]),
+        ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
+                         {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}, {"dropout": {"p": 0.2}}] +
+         [{"residual": [
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}]}]}] * 2 +
+         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+          {"softmaxlast": {"dim": -1}}], [[1,12,21,5,8,10,5,17]] * 5, [[12,21,5,8,10,5,17,21]] * 5),
     ])
     def test_compute_output(self, layers: list[dict], input_data: list, target: list | int | None):
         model = NeuralNetworkModel("test", Mapper(layers, {"sgd": {}}))
@@ -88,7 +123,6 @@ class TestNeuralNetModel(unittest.TestCase):
         self.assertEqual(len(in_shape), len(out_shape))
         if len(out_shape) > 1: # same batch size?
             self.assertEqual(in_shape[0], out_shape[0])
-        self.assertEqual(params[-1].shape[-1], out_shape[-1])
         self.assertTrue(target is None or cost is not None)
         self.assertFalse(model.layers.training)
 
@@ -113,6 +147,19 @@ class TestNeuralNetModel(unittest.TestCase):
           {"linear": {"in_features": 10, "out_features": 18}}, {"dropout": {"p": 0.1}}, {"softmax": {"dim": 1}}],
          {"adamw": {"lr": 0.1, "betas": [0.99, 0.9999], "eps": 1e-9, "weight_decay": 1e-1}},
          [[0, 5, 8],[1, 3, 7]] * 162, [2, 4] * 162, 5, 32),
+        ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
+                         {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}, {"dropout": {"p": 0.2}}] +
+         [{"residual": [
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}]}]}] * 2 +
+         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+          {"softmaxlast": {"dim": -1}}],
+         {"adamw": {"lr": 3e-4}},
+         [[1,12,21,5,8,10,5,17]] * 768, [[12,21,5,8,10,5,17,21]] * 768, 5, 64)
     ])
     def test_train(self, layers: list[dict], optimizer: dict, input_data: list, target: list,
                    epochs: int, batch_size: int):

@@ -117,17 +117,22 @@ class NeuralNetworkModel(nn.Module):
         input_tensor = torch.tensor(input_data)
         forwarded_tensors = []
         forwarded_tensor = input_tensor
-        logits = input_tensor
+        previous_tensor = input_tensor
         for layer in self.layers:
             layer.training = training
-            logits = forwarded_tensor
-            forwarded_tensor = layer.forward(logits)
+            previous_tensor = forwarded_tensor
+            forwarded_tensor = layer(previous_tensor)
             forwarded_tensors.append(forwarded_tensor)
 
         if target is None or target == []:
             cost = torch.empty(0)
         elif isinstance(self.layers[-1], nn.Softmax):
             label_tensor = torch.tensor(target, dtype=torch.int64)
+            if previous_tensor.ndim > 2 and label_tensor.ndim > 1: # e.g. transformer cost
+                logits = previous_tensor.view(-1, previous_tensor.size(-1))
+                label_tensor = label_tensor.view(-1)
+            else:
+                logits = previous_tensor
             cost = nn.functional.cross_entropy(logits, label_tensor)
         else:
             target_tensor = torch.tensor(target)
