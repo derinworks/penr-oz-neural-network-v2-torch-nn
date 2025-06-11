@@ -6,19 +6,19 @@ import torch.nn.functional as nnf
 
 
 class CausalSelfAttention(nn.Module):
-    def __init__(self, embedding_dim: int, num_heads: int, block_size: int, bias=True, dropout: float=0.0):
+    def __init__(self, embedding_dim: int, num_heads: int, block_size: int, bias=True, dropout: float=0.0, device=None):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.num_heads = num_heads
         # Query, Key and Value in one matrix
-        self.query_key_value = nn.Linear(embedding_dim, embedding_dim * 3, bias)
+        self.query_key_value = nn.Linear(embedding_dim, embedding_dim * 3, bias, device=device)
         # Output projection
-        self.projection = nn.Linear(embedding_dim, embedding_dim, bias)
+        self.projection = nn.Linear(embedding_dim, embedding_dim, bias, device=device)
         # Regularization
         self.dropout = nn.Dropout(dropout)
         self.projection_dropout = nn.Dropout(dropout)
         # Causal mask for self attention decoding
-        self.register_buffer("causal_mask", torch.tril(torch.ones(1, 1, block_size, block_size)))
+        self.register_buffer("causal_mask", torch.tril(torch.ones(1, 1, block_size, block_size, device=device)))
 
     def forward(self, input_data: Tensor) -> Tensor:
         batch_size, block_size, embedding_dim = input_data.size()
@@ -46,7 +46,7 @@ class CausalSelfAttention(nn.Module):
 class PositionEmbedding(nn.Embedding):
     def forward(self, input_data: Tensor) -> Tensor:
         _, num_positions = input_data.shape
-        positions = torch.arange(num_positions, dtype=torch.long)
+        positions = torch.arange(num_positions, dtype=torch.long, device=input_data.device)
         forwarded = super().forward(positions)
         return forwarded
 
