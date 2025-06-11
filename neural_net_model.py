@@ -14,6 +14,7 @@ from mappers import Mapper
 log = logging.getLogger(__name__)
 MODELS_FOLDER = "models"
 
+
 class NeuralNetworkModel(nn.Module):
     def __init__(self, model_id: str, mapper: Mapper):
         """
@@ -114,7 +115,8 @@ class NeuralNetworkModel(nn.Module):
         return activations[-1].tolist(), cost.item() if cost.numel() > 0 else None
 
     def _forward(self, input_data: list, target: list | int, training=False) -> Tuple[list[Tensor], Tensor]:
-        input_tensor = torch.tensor(input_data)
+        device = next(self.parameters()).device
+        input_tensor = torch.tensor(input_data, device=device)
         forwarded_tensors = []
         forwarded_tensor = input_tensor
         previous_tensor = input_tensor
@@ -127,7 +129,7 @@ class NeuralNetworkModel(nn.Module):
         if target is None or target == []:
             cost = torch.empty(0)
         elif isinstance(self.layers[-1], nn.Softmax):
-            label_tensor = torch.tensor(target, dtype=torch.int64)
+            label_tensor = torch.tensor(target, dtype=torch.int64, device=device)
             if previous_tensor.ndim > 2 and label_tensor.ndim > 1: # e.g. transformer cost
                 logits = previous_tensor.view(-1, previous_tensor.size(-1))
                 label_tensor = label_tensor.view(-1)
@@ -135,7 +137,7 @@ class NeuralNetworkModel(nn.Module):
                 logits = previous_tensor
             cost = nn.functional.cross_entropy(logits, label_tensor)
         else:
-            target_tensor = torch.tensor(target)
+            target_tensor = torch.tensor(target, device=device)
             cost = nn.functional.mse_loss(forwarded_tensor, target_tensor)
 
         return forwarded_tensors, cost
