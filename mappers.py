@@ -1,4 +1,4 @@
-from typing import Iterable, Tuple
+from typing import Any, Iterable, Tuple
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -49,7 +49,7 @@ class Mapper:
         self.optimizer = optimizer
 
     @staticmethod
-    def _unpack_func_and_args(k_to_args: dict, k_to_func: dict) -> Tuple[..., dict | list]:
+    def _unpack_func_and_args(k_to_args: dict, k_to_func: dict) -> Tuple[Any, dict | list]:
         return next(((k_to_func[k], v) for k, v in k_to_args.items() if k in k_to_func), (None, None))
 
     @staticmethod
