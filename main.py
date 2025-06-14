@@ -23,12 +23,6 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
-logging.basicConfig(
-    datefmt=DATE_FORMAT,
-    format=LOG_FORMAT,
-)
 log = logging.getLogger(__name__)
 
 # Constants for examples
@@ -250,45 +244,9 @@ def delete_model(model_id: str = ModelIdQuery(...)):
 
 if __name__ == "__main__": # pragma: no cover
     import uvicorn
+    import json
 
-    uvicorn.run(app,
-                host="127.0.0.1",
-                port=8000,
-                log_config={
-                    "version": 1,
-                    "disable_existing_loggers": False,
-                    "formatters": {
-                        "default": {
-                            "format": LOG_FORMAT,
-                            "datefmt": DATE_FORMAT,
-                        },
-                    },
-                    "handlers": {
-                        "default": {
-                            "level": "INFO",
-                            "class": "logging.StreamHandler",
-                            "formatter": "default",
-                        },
-                    },
-                    "loggers": {
-                        "uvicorn": {
-                            "level": "INFO",
-                            "handlers": ["default"],
-                            "propagate": False,
-                        },
-                        "uvicorn.error": {
-                            "level": "INFO",
-                            "handlers": ["default"],
-                            "propagate": False,
-                        },
-                        "uvicorn.access": {
-                            "level": "INFO",
-                            "handlers": ["default"],
-                            "propagate": False,
-                        },
-                    },
-                    "root": {
-                        "level": "INFO",
-                        "handlers": ["default"],
-                    },
-                })
+    with open("log_config.json", "r") as f:
+        log_config = json.load(f)
+
+    uvicorn.run(app, host="127.0.0.1", port=8000, log_config=log_config)

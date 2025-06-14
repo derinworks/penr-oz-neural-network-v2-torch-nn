@@ -50,7 +50,7 @@ the [PyTorch Neural Network package](https://docs.pytorch.org/tutorials/beginner
    ```
    or
    ```bash
-   uvicorn main:app --reload
+   uvicorn main:app --log-config log_config.json
    ```
 
 5. **Interact with the Service**
