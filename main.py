@@ -15,7 +15,7 @@ from neural_net_model import NeuralNetworkModel
 
 app = FastAPI(
     title="Neural Network Model API v2",
-    description="API to create, serialize, compute output and diagnose of neural network models.",
+    description="API to create, serialize, compute output, evaluate, train and diagnose of neural network models.",
     version="0.2.0"
 )
 
@@ -105,7 +105,7 @@ class CreateModelRequest(ModelRequest):
     )
 
 
-class EvaluateRequest(ModelRequest):
+class OutputRequest(ModelRequest):
     input: list = Field(
         ...,
         examples=[[example["input"] for example in EXAMPLES] * 20,],
@@ -117,21 +117,29 @@ class EvaluateRequest(ModelRequest):
     )
 
 
-class TrainingRequest(EvaluateRequest):
+class EvaluateRequest(OutputRequest):
     target: list = Field(
         ...,
         examples=[[example["target"] for example in EXAMPLES] * 20,],
         description="The expected target data"
     )
     epochs: int = Field(
-        10,
+        1,
         examples=[10],
-        description="The number of training epochs"
+        description="The number of evaluation epochs"
     )
     batch_size: int | None = Field(
         None,
         examples=[32],
-        description="The batch size for training sample each epoch (Optional)"
+        description="The batch size to sample each epoch (Optional)"
+    )
+
+
+class TrainingRequest(EvaluateRequest):
+    epochs: int = Field(
+        10,
+        examples=[10],
+        description="The number of training epochs"
     )
 
 
@@ -169,7 +177,7 @@ def create_model(body: CreateModelRequest = Body(...)):
     return {"message": f"Model {model_id} created and saved successfully"}
 
 @app.post("/output/")
-def compute_model_output(body: EvaluateRequest =
+def compute_model_output(body: OutputRequest =
                          Body(...,
                               openapi_examples={f"example_{idx}": {
                                  "summary": f"Example {idx + 1}",
@@ -187,6 +195,26 @@ def compute_model_output(body: EvaluateRequest =
     return {"output": output,
             "cost": cost,
             }
+
+@app.post("/evaluate/")
+def evaluate_model(body: EvaluateRequest =
+                         Body(...,
+                              openapi_examples={f"example_{idx}": {
+                                 "summary": f"Example {idx + 1}",
+                                 "description": f"Example input and training data for case {idx + 1}",
+                                 "value": {
+                                     "model_id": "test",
+                                     "input": [example["input"]] * 6,
+                                     "target": [example["target"]] * 6,
+                                     "epochs": 2,
+                                     "batch_size": 3,
+                                 }
+                             } for idx, example in enumerate(EXAMPLES)} )):
+    model_id = body.model_id
+    log.info(f"Requesting evaluation of model {model_id}")
+    model = NeuralNetworkModel.deserialize(model_id)
+    cost = model.evaluate_model(body.input, body.target, body.epochs, body.batch_size)
+    return {"cost": cost}
 
 # This will track active training sessions by model_id
 model_locks: Dict[str, Lock] = {}

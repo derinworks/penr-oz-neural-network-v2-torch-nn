@@ -76,6 +76,30 @@ def test_output_endpoint(mock_deserialized_model, input_data, target, output, co
 
     assert response.status_code == 200
 
+@pytest.mark.parametrize("input_data, target, epochs, batch_size, cost", [
+    ([[0.0, 0.0, 0.0]] * 4, [[0.0, 0.0, 1.0]] * 4, 2, None, 1.234),
+    ([[0.0, 0.0, 0.0]] * 6, [[0.0, 0.0, 1.0]] * 6, 2, 2, 1.234),
+    ([[0.0, 0.0, 0.0]] * 10, [1] * 10, 3, 3, 1.234),
+])
+def test_evaluate_endpoint(mock_deserialized_model, input_data, target, epochs, batch_size, cost):
+    mock_deserialized_model.evaluate_model.return_value = cost
+
+    payload = {
+        "model_id": "test",
+        "input": input_data,
+        "target": target,
+        "epochs": epochs,
+        "batch_size": batch_size,
+    }
+
+    response = client.post("/evaluate/", json=payload)
+
+    assert response.json() == {
+        "cost": cost,
+    }
+
+    assert response.status_code == 200
+
 def test_train_endpoint(mock_deserialized_model):
     payload = {
         "model_id": "test",

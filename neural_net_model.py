@@ -107,12 +107,45 @@ class NeuralNetworkModel(nn.Module):
         :param target: Target data (optional)
         :return: output, cost (optional)
         """
-        # evaluation is not training
+        # output is not training
+        self.eval()
         self.layers.training = False
         # forward pass
         activations, cost = self._forward(input_data, target)
         # last activation  and a float cost is returned, if any
         return activations[-1].tolist(), cost.item() if cost.numel() > 0 else None
+
+    @torch.no_grad()
+    def evaluate_model(self, input_data: list, target: list, epochs=100, batch_size=None) -> float:
+        """
+        Evaluate cost compared to the provided target vector without training done.
+        :param input_data: Input data
+        :param target: Target data
+        :param epochs: Number of evaluation iterations.
+        :param batch_size: Batch size override for evaluation sample.
+        :return: average cost
+        """
+        # evaluation is not training
+        self.eval()
+        self.layers.training = False
+        # calculate sample size
+        data_size = len(input_data)
+        sample_size = batch_size or int(data_size / epochs)  # explicit or sample equally per epoch
+        log.info(f"Evaluation sample size: {sample_size}")
+        # evaluate cost each epoch and add to costs
+        costs = torch.zeros(epochs)
+        for eval_i in range(epochs):
+            # sample data
+            sample_indices = torch.randint(len(input_data), (sample_size,))
+            sample_input = [input_data[sample_idx] for sample_idx in sample_indices]
+            sample_target = [target[sample_idx] for sample_idx in sample_indices]
+            # forward pass
+            _, sample_cost = self._forward(sample_input, sample_target)
+            # record sample cost
+            costs[eval_i] = sample_cost
+        # calculate and return average sample cost
+        avg_cost = costs.mean().item()
+        return avg_cost
 
     def _forward(self, input_data: list, target: list | int, training=False) -> Tuple[list[Tensor], Tensor]:
         device = next(self.parameters()).device
@@ -177,6 +210,7 @@ class NeuralNetworkModel(nn.Module):
         self.serialize()
         last_serialized = time.time()
         activations = None
+        self.train()
         self.layers.training = True
 
         # Start training
