@@ -116,7 +116,6 @@ class TestNeuralNetModel(unittest.TestCase):
         model = NeuralNetworkModel("test", Mapper(layers, {"sgd": {}}))
 
         output, cost = model.compute_output(input_data, target)
-        params = [p for p in model.parameters()]
         in_shape = np.shape(input_data)
         out_shape = np.shape(output)
 
@@ -127,8 +126,42 @@ class TestNeuralNetModel(unittest.TestCase):
         self.assertFalse(model.layers.training)
 
     @parameterized.expand([
+        ([{"linear": {"in_features": 9, "out_features": 18}}, {"tanh": {}},
+          {"linear": {"in_features": 18, "out_features": 9}}, {"tanh": {}}] * 2,
+         [[0.5] * 9] * 2, [[0.5] * 9] * 2, 1, None),
+        ([{"linear": {"in_features": 4, "out_features": 8}}, {"tanh": {}},
+          {"linear": {"in_features": 8, "out_features": 16}}, {"softmax": {"dim": 1}}],
+         [[0.5] * 4] * 8, [13] * 8, 2, 2),
+        ([{"embedding": {"num_embeddings": 18, "embedding_dim": 2}}, {"flatten": {}},
+          {"linear": {"in_features": 6, "out_features": 18}}, {"tanh": {}},
+          {"linear": {"in_features": 18, "out_features": 9}}, {"softmax": {"dim": 1}}],
+         [[0, 5, 8],[1, 3, 7]] * 10, [2, 4] * 10, 3, 3),
+        ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
+                         {"position": {"num_embeddings": 8, "embedding_dim": 4}}]},
+          {"dropout": {"p": 0.2}}] +
+         [{"residual": [
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+             {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}]}]}] * 2 +
+         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+          {"softmaxlast": {"dim": -1}}],
+         [[1,12,21,5,8,10,5,17]] * 24, [[12,21,5,8,10,5,17,21]] * 24, 4, 3),
+    ])
+    def test_evaluate(self, layers: list[dict], input_data: list, target: list,
+                      epochs: int, batch_size: int | None):
+        model = NeuralNetworkModel("test", Mapper(layers, {"sgd": {}}))
+
+        cost = model.evaluate_model(input_data, target, epochs, batch_size)
+
+        self.assertIsNotNone(cost)
+        self.assertFalse(model.layers.training)
+
+    @parameterized.expand([
         ([{"linear": {"in_features": 9, "out_features": 9}}, {"softmax": {"dim": 1}}], {"sgd": {"lr": 0.1}},
-         [[1.0] + [0.0] * 8] * 90, [4] * 90, 2, 30),
+         [[1.0] + [0.0] * 8] * 90, [4] * 90, 3, None),
         ([{"linear": {"in_features": 9, "out_features": 18}}, {"tanh": {}},
           {"linear": {"in_features": 18, "out_features": 9}}, {"tanh": {}}] * 2, {"adam": {"lr": 0.1}},
          [[0.5] * 9] * 702, [[0.5] * 9] * 702, 4, 20),
@@ -162,7 +195,7 @@ class TestNeuralNetModel(unittest.TestCase):
          [[1,12,21,5,8,10,5,17]] * 768, [[12,21,5,8,10,5,17,21]] * 768, 5, 64)
     ])
     def test_train(self, layers: list[dict], optimizer: dict, input_data: list, target: list,
-                   epochs: int, batch_size: int):
+                   epochs: int, batch_size: int | None):
         # clean up any persisted previous test model
         NeuralNetworkModel.delete("test")
 
