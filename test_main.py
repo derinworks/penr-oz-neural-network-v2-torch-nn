@@ -100,6 +100,28 @@ def test_evaluate_endpoint(mock_deserialized_model, input_data, target, epochs, 
 
     assert response.status_code == 200
 
+@pytest.mark.parametrize("input_context, block_size, max_new_tokens, tokens", [
+    ([[0]], 8, 2, [0, 1, 2]),
+    ([[0, 1]], 4, 2, [0, 1, 2, 3]),
+])
+def test_generate_endpoint(mock_deserialized_model, input_context, block_size, max_new_tokens, tokens):
+    mock_deserialized_model.generate_tokens.return_value = tokens
+
+    payload = {
+        "model_id": "test",
+        "input": input_context,
+        "block_size": block_size,
+        "max_new_tokens": max_new_tokens,
+    }
+
+    response = client.post("/generate/", json=payload)
+
+    assert response.json() == {
+        "tokens": tokens,
+    }
+
+    assert response.status_code == 200
+
 def test_train_endpoint(mock_deserialized_model):
     payload = {
         "model_id": "test",

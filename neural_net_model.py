@@ -147,9 +147,34 @@ class NeuralNetworkModel(nn.Module):
         avg_cost = costs.mean().item()
         return avg_cost
 
+    @torch.no_grad()
+    def generate_tokens(self, input_context: list, block_size: int, max_new_tokens: int) -> list:
+        # generating is not training
+        self.eval()
+        self.layers.training = False
+        # initialize context
+        device = next(self.parameters()).device
+        context = torch.tensor(input_context, dtype=torch.long, device=device)
+        # generate up to max new tokens
+        for sample_idx in range(max_new_tokens):
+            # crop context to the last block size tokens
+            cropped_context = context[:, -block_size:]
+            # Predict next token
+            activations, _ = self(cropped_context)
+            probs = activations[-1]
+            next_idx = torch.multinomial(probs, num_samples=1)
+            # Append next token in for next prediction
+            context = torch.cat((context, next_idx), dim=1)
+        # extract and return tokens
+        tokens = context[0].tolist()
+        return tokens
+
     def _forward(self, input_data: list, target: list | int, training=False) -> Tuple[list[Tensor], Tensor]:
         device = next(self.parameters()).device
         input_tensor = torch.tensor(input_data, device=device)
+        return self(input_tensor, target, training)
+
+    def forward(self, input_tensor: Tensor, target: list | int=None, training=False) -> Tuple[list[Tensor], Tensor]:
         forwarded_tensors = []
         forwarded_tensor = input_tensor
         previous_tensor = input_tensor
@@ -162,7 +187,7 @@ class NeuralNetworkModel(nn.Module):
         if target is None or target == []:
             cost = torch.empty(0)
         elif isinstance(self.layers[-1], nn.Softmax):
-            label_tensor = torch.tensor(target, dtype=torch.int64, device=device)
+            label_tensor = torch.tensor(target, dtype=torch.int64, device=input_tensor.device)
             if previous_tensor.ndim > 2 and label_tensor.ndim > 1: # e.g. transformer cost
                 logits = previous_tensor.view(-1, previous_tensor.size(-1))
                 label_tensor = label_tensor.view(-1)
@@ -170,7 +195,7 @@ class NeuralNetworkModel(nn.Module):
                 logits = previous_tensor
             cost = nn.functional.cross_entropy(logits, label_tensor)
         else:
-            target_tensor = torch.tensor(target, device=device)
+            target_tensor = torch.tensor(target, device=input_tensor.device)
             cost = nn.functional.mse_loss(forwarded_tensor, target_tensor)
 
         return forwarded_tensors, cost
