@@ -15,7 +15,7 @@ from neural_net_model import NeuralNetworkModel
 
 app = FastAPI(
     title="Neural Network Model API v2",
-    description="API to create, serialize, compute output, evaluate, train and diagnose of neural network models.",
+    description="API to create, serialize, output, evaluate, generate, train and diagnose of neural network models.",
     version="0.2.0"
 )
 
@@ -78,7 +78,7 @@ class CreateModelRequest(ModelRequest):
     layers: list[dict] = Field(
         ...,
         examples=[
-            [{"embedding": {"num_embeddings": 3, "embedding_dim": 2}}, {"flatten": {}},
+            [{"embedding": {"num_embeddings": 9, "embedding_dim": 2}}, {"flatten": {}},
              {"linear": {"in_features": 18, "out_features": 9, "bias": False},
               "xavier_uniform": {"gain": 0.7}},
              {"batchnorm1d": {"num_features": 9}},
@@ -132,6 +132,24 @@ class EvaluateRequest(OutputRequest):
         None,
         examples=[32],
         description="The batch size to sample each epoch (Optional)"
+    )
+
+
+class GenerateRequest(ModelRequest):
+    input: list = Field(
+        ...,
+        examples=[[[0] * 9]],
+        description="The initial input context"
+    )
+    block_size: int = Field(
+        ...,
+        examples=[9],
+        description="The block size of context"
+    )
+    max_new_tokens: int = Field(
+        ...,
+        examples=[10],
+        description="The maximum number of tokens to generate"
     )
 
 
@@ -215,6 +233,16 @@ def evaluate_model(body: EvaluateRequest =
     model = NeuralNetworkModel.deserialize(model_id)
     cost = model.evaluate_model(body.input, body.target, body.epochs, body.batch_size)
     return {"cost": cost}
+
+
+@app.post("/generate/")
+def model_generate(body: GenerateRequest = Body(...)):
+    model_id = body.model_id
+    log.info(f"Generating tokens using model {model_id}")
+    model = NeuralNetworkModel.deserialize(model_id)
+    generated_tokens = model.generate_tokens(body.input, body.block_size, body.max_new_tokens)
+    return {"tokens": generated_tokens}
+
 
 # This will track active training sessions by model_id
 model_locks: Dict[str, Lock] = {}
