@@ -10,7 +10,8 @@ import neural_net_layers as nnl
 class TestNeuralNetModel(unittest.TestCase):
 
     @parameterized.expand([
-        ([{"linear": {"in_features": 9, "out_features": 9}, "xavier_uniform": {}}, {"relu": {}}], {"adam": {"lr": 0.1}},
+        ([{"linear": {"in_features": 9, "out_features": 9, "device": "cpu"}, "xavier_uniform": {}}, {"relu": {}}],
+         {"adam": {"lr": 0.1}},
          [nn.Linear,nn.ReLU], [(9,9),(9,)], 90),
         ([{"linear": {"in_features": 18, "out_features": 9}, "xavier_uniform": {}}, {"softmax": {"dim": -1}}],
          {"adamw": {"lr": 0.1}},

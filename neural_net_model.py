@@ -154,6 +154,7 @@ class NeuralNetworkModel(nn.Module):
         self.layers.training = False
         # initialize context
         device = next(self.parameters()).device
+        log.info(f"Generating tokens using device {device}")
         context = torch.tensor(input_context, dtype=torch.long, device=device)
         # generate up to max new tokens
         for sample_idx in range(max_new_tokens):
@@ -171,6 +172,7 @@ class NeuralNetworkModel(nn.Module):
 
     def _forward(self, input_data: list, target: list | int, training=False) -> Tuple[list[Tensor], Tensor]:
         device = next(self.parameters()).device
+        log.info(f"Forwarding tensors using device {device}")
         input_tensor = torch.tensor(input_data, device=device)
         return self(input_tensor, target, training)
 
