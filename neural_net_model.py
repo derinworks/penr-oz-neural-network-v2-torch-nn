@@ -1,6 +1,8 @@
 import logging
 import os
+import multiprocessing
 import random
+import shutil
 from typing import Tuple, Callable
 import time
 from datetime import datetime as dt
@@ -12,6 +14,7 @@ from mappers import Mapper
 
 
 log = logging.getLogger(__name__)
+SHM_PATH = "/dev/shm"
 MODELS_FOLDER = "models"
 
 
@@ -54,6 +57,7 @@ class NeuralNetworkModel(nn.Module):
 
     def serialize(self):
         os.makedirs(MODELS_FOLDER, exist_ok=True)
+        os.makedirs(os.path.join(SHM_PATH, MODELS_FOLDER), exist_ok=True)
         model_path = self.get_model_path(self.model_id)
         model_data = {
             "layers": self.mapper.layers,
@@ -67,17 +71,27 @@ class NeuralNetworkModel(nn.Module):
             "stats": self.stats,
             "status": self.status,
         }
-        torch.save(model_data, model_path)
-        log.info(f"Model saved successfully: {model_path}")
+        model_in_shm_path = os.path.join(SHM_PATH, model_path)
+        log.info(f"Caching model to {model_in_shm_path}...")
+        torch.save(model_data, model_in_shm_path)
+        log.info(f"Model cached successfully: {model_in_shm_path}")
+        p = multiprocessing.Process(target=shutil.copyfile, args=(model_in_shm_path, model_path))
+        log.info(f"Offload flushing model cache {model_in_shm_path} to {model_path}...")
+        p.start()
 
     @classmethod
     def deserialize(cls, model_id: str):
         try:
-            path = cls.get_model_path(model_id)
-            data = torch.load(path)
+            model_in_shm_path = os.path.join(SHM_PATH, cls.get_model_path(model_id))
+            log.info(f"Retrieving model from {model_in_shm_path}...")
+            data = torch.load(model_in_shm_path)
+            log.info(f"Loaded model {model_id} data")
             model = cls(model_id, Mapper(data["layers"], data["optim"]))
+            log.info(f"Created model {model_id}")
             model.load_state_dict(data["state"])
+            log.info(f"Loaded state into model {model_id}")
             model.optimizer.load_state_dict(data["optim_state"])
+            log.info(f"Loaded optimizer for model {model_id}")
             model.progress = data["progress"]
             model.training_data_buffer = data["training_data_buffer"]
             model.training_buffer_size = model.num_params
@@ -85,6 +99,7 @@ class NeuralNetworkModel(nn.Module):
             model.avg_cost_history = data["average_cost_history"]
             model.stats = data["stats"]
             model.status = data["status"]
+            log.info(f"Model {model_id} is fully loaded")
             return model
         except FileNotFoundError as e:
             log.error(f"File not found error occurred: {str(e)}")
@@ -94,7 +109,10 @@ class NeuralNetworkModel(nn.Module):
     def delete(cls, model_id: str):
         try:
             model_path = cls.get_model_path(model_id)
-            os.remove(model_path)
+            model_in_shm_path = os.path.join(SHM_PATH, model_path)
+            os.remove(model_in_shm_path)
+            if os.path.exists(model_path):
+                os.remove(model_path)
         except FileNotFoundError as e:
             log.warning(f"Failed to delete: {str(e)}")
 
@@ -111,7 +129,9 @@ class NeuralNetworkModel(nn.Module):
         self.eval()
         self.layers.training = False
         # forward pass
-        activations, cost = self._forward(input_data, target)
+        device = next(self.parameters()).device
+        log.info(f"Computing model output using device {device}")
+        activations, cost = self._forward(input_data, target, device)
         # last activation  and a float cost is returned, if any
         return activations[-1].tolist(), cost.item() if cost.numel() > 0 else None
 
@@ -132,17 +152,22 @@ class NeuralNetworkModel(nn.Module):
         data_size = len(input_data)
         sample_size = batch_size or int(data_size / epochs)  # explicit or sample equally per epoch
         log.info(f"Evaluation sample size: {sample_size}")
+        # determine device
+        device = next(self.parameters()).device
+        log.info(f"Evaluating model using device {device}")
         # evaluate cost each epoch and add to costs
         costs = torch.zeros(epochs)
-        for eval_i in range(epochs):
+        for epoch in range(epochs):
             # sample data
             sample_indices = torch.randint(len(input_data), (sample_size,))
             sample_input = [input_data[sample_idx] for sample_idx in sample_indices]
             sample_target = [target[sample_idx] for sample_idx in sample_indices]
             # forward pass
-            _, sample_cost = self._forward(sample_input, sample_target)
+            _, sample_cost = self._forward(sample_input, sample_target, device)
             # record sample cost
-            costs[eval_i] = sample_cost
+            costs[epoch] = sample_cost
+            # Log each
+            log.info(f"Model {self.model_id}: Evaluation Epoch {epoch + 1}, Cost: {sample_cost:.4f}")
         # calculate and return average sample cost
         avg_cost = costs.mean().item()
         return avg_cost
@@ -170,18 +195,15 @@ class NeuralNetworkModel(nn.Module):
         tokens = context[0].tolist()
         return tokens
 
-    def _forward(self, input_data: list, target: list | int, training=False) -> Tuple[list[Tensor], Tensor]:
-        device = next(self.parameters()).device
-        log.info(f"Forwarding tensors using device {device}")
+    def _forward(self, input_data: list, target: list | int, device=None) -> Tuple[list[Tensor], Tensor]:
         input_tensor = torch.tensor(input_data, device=device)
-        return self(input_tensor, target, training)
+        return self(input_tensor, target)
 
-    def forward(self, input_tensor: Tensor, target: list | int=None, training=False) -> Tuple[list[Tensor], Tensor]:
+    def forward(self, input_tensor: Tensor, target: list | int=None) -> Tuple[list[Tensor], Tensor]:
         forwarded_tensors = []
         forwarded_tensor = input_tensor
         previous_tensor = input_tensor
         for layer in self.layers:
-            layer.training = training
             previous_tensor = forwarded_tensor
             forwarded_tensor = layer(previous_tensor)
             forwarded_tensors.append(forwarded_tensor)
@@ -230,6 +252,10 @@ class NeuralNetworkModel(nn.Module):
         training_sample_size = batch_size or int(len(training_data) / epochs)  # explicit or sample equally per epoch
         log.info(f"Training sample size: {training_sample_size}")
 
+        # Determine device
+        device = next(self.parameters()).device
+        log.info(f"Training model using device {device}")
+
         # Reset model for training prep and save
         self.progress = []
         self.stats = None
@@ -251,7 +277,7 @@ class NeuralNetworkModel(nn.Module):
             input_sample = [inpt for inpt, _ in training_sample]
             target_sample = [tgt for _, tgt in training_sample]
             # calculate cost
-            activations, cost = self._forward(input_sample, target_sample)
+            activations, cost = self._forward(input_sample, target_sample, device)
             # check if training taking long
             long_training = time.time() - last_serialized >= 10
             # clear gradients
@@ -280,7 +306,7 @@ class NeuralNetworkModel(nn.Module):
                         ],
                     })
             # Log each
-            log.info(f"Model {self.model_id}: Epoch {epoch + 1}, Cost: {progress_cost:.4f}")
+            log.info(f"Model {self.model_id}: Training Epoch {epoch + 1}, Cost: {progress_cost:.4f}")
 
             # Serialize model while long training intervals
             if long_training: # pragma: no cover
