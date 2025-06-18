@@ -1,8 +1,10 @@
+import os.path
+import time
 import unittest
 from parameterized import parameterized
 import numpy as np
 import torch.nn as nn
-from neural_net_model import NeuralNetworkModel
+from neural_net_model import NeuralNetworkModel, SHM_PATH
 from mappers import Mapper
 import neural_net_layers as nnl
 
@@ -348,6 +350,16 @@ class TestNeuralNetModel(unittest.TestCase):
             NeuralNetworkModel.deserialize("nonexistent_model")
 
     def test_delete(self):
+        model = NeuralNetworkModel("test", Mapper([{"linear": {"in_features": 9, "out_features": 9}}],
+                                                  {"sgd": {}}))
+        model.serialize()
+        model_path = NeuralNetworkModel.get_model_path(model.model_id)
+        model_in_shm_path = os.path.join(SHM_PATH, model_path)
+
+        self.assertTrue(os.path.exists(model_in_shm_path))
+        time.sleep(1) # wait a bit for cache to flush to disk
+        self.assertTrue(os.path.exists(model_path))
+
         NeuralNetworkModel.delete("test")
         with self.assertRaises(KeyError):
             NeuralNetworkModel.deserialize("test")
@@ -355,6 +367,26 @@ class TestNeuralNetModel(unittest.TestCase):
     def test_invalid_delete(self):
         # No error raised for failing to delete
         NeuralNetworkModel.delete("nonexistent")
+
+    def test_cache_miss(self):
+        model = NeuralNetworkModel("test", Mapper([{"linear": {"in_features": 9, "out_features": 9}}],
+                                                  {"sgd": {}}))
+        model.serialize()
+        model_path = NeuralNetworkModel.get_model_path(model.model_id)
+        model_in_shm_path = os.path.join(SHM_PATH, model_path)
+
+        self.assertTrue(os.path.exists(model_in_shm_path))
+        time.sleep(1) # wait a bit for cache to flush to disk
+        self.assertTrue(os.path.exists(model_path))
+
+        os.remove(model_in_shm_path)
+
+        self.assertFalse(os.path.exists(model_in_shm_path))
+
+        model = NeuralNetworkModel.deserialize("test")
+
+        self.assertIsNotNone(model)
+        self.assertTrue(os.path.exists(model_in_shm_path))
 
 
 if __name__ == '__main__':

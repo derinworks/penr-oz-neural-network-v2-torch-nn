@@ -82,7 +82,11 @@ class NeuralNetworkModel(nn.Module):
     @classmethod
     def deserialize(cls, model_id: str):
         try:
-            model_in_shm_path = os.path.join(SHM_PATH, cls.get_model_path(model_id))
+            model_path = cls.get_model_path(model_id)
+            model_in_shm_path = os.path.join(SHM_PATH, model_path)
+            if not os.path.exists(model_in_shm_path):
+                log.info(f"Cache miss: copying from {model_path}")
+                shutil.copyfile(model_path, model_in_shm_path)
             log.info(f"Retrieving model from {model_in_shm_path}...")
             data = torch.load(model_in_shm_path)
             log.info(f"Loaded model {model_id} data")
