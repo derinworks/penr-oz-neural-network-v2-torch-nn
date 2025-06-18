@@ -349,10 +349,10 @@ class NeuralNetworkModel(nn.Module):
         # Update stats
         hist_f: Callable[[torch.return_types.histogram], Tuple[list, list]] = (
             lambda h: (h.bin_edges[:-1].tolist(), h.hist.tolist()))
-        act_hist = [hist_f(torch.histogram(a, density=True)) for a in activations]
-        act_grad_hist = [([], []) if a.grad is None else hist_f(torch.histogram(a.grad, density=True))
+        act_hist = [hist_f(torch.histogram(a.cpu(), density=True)) for a in activations]
+        act_grad_hist = [([], []) if a.grad is None else hist_f(torch.histogram(a.grad.cpu(), density=True))
                          for a in activations]
-        weight_grad_hist = [([], []) if w is None else hist_f(torch.histogram(w.grad, density=True))
+        weight_grad_hist = [([], []) if w is None else hist_f(torch.histogram(w.grad.cpu(), density=True))
                             for w in self._weights]
         algos = [l.__class__.__name__.lower() for l in self.layers]
         self.stats = {
