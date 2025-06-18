@@ -376,6 +376,8 @@ class TestNeuralNetModel(unittest.TestCase):
         model_in_shm_path = os.path.join(SHM_PATH, model_path)
 
         self.assertTrue(os.path.exists(model_in_shm_path))
+        time.sleep(1) # wait a bit for cache to flush to disk
+        self.assertTrue(os.path.exists(model_path))
 
         os.remove(model_in_shm_path)
 
