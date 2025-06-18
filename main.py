@@ -103,6 +103,11 @@ class CreateModelRequest(ModelRequest):
         ],
         description="A dictionary where the key is the PyTorch optimizer name and the value is its args."
     )
+    device: str = Field(
+        None,
+        examples=["cpu", "cuda"],
+        description="A device name for PyTorch to move the model to (Optional)"
+    )
 
 
 class OutputRequest(ModelRequest):
@@ -190,7 +195,7 @@ async def dashboard(request: Request):
 def create_model(body: CreateModelRequest = Body(...)):
     model_id = body.model_id
     log.info(f"Requesting creation of model {model_id}")
-    model = NeuralNetworkModel(model_id, Mapper(body.layers, body.optimizer))
+    model = NeuralNetworkModel(model_id, Mapper(body.layers, body.optimizer), body.device)
     model.serialize()
     return {"message": f"Model {model_id} created and saved successfully"}
 

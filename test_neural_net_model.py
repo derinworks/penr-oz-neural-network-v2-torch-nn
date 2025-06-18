@@ -1,6 +1,8 @@
 import os.path
 import time
 import unittest
+
+import torch
 from parameterized import parameterized
 import numpy as np
 import torch.nn as nn
@@ -12,48 +14,48 @@ import neural_net_layers as nnl
 class TestNeuralNetModel(unittest.TestCase):
 
     @parameterized.expand([
-        ([{"linear": {"in_features": 9, "out_features": 9, "device": "cpu"}, "xavier_uniform": {}}, {"relu": {}}],
-         {"adam": {"lr": 0.1}},
+        ([{"linear": {"in_features": 9, "out_features": 9}, "xavier_uniform": {}}, {"relu": {}}],
+         {"adam": {"lr": 0.1}}, "cpu",
          [nn.Linear,nn.ReLU], [(9,9),(9,)], 90),
         ([{"linear": {"in_features": 18, "out_features": 9}, "xavier_uniform": {}}, {"softmax": {"dim": -1}}],
-         {"adamw": {"lr": 0.1}},
+         {"adamw": {"lr": 0.1}}, None,
          [nn.Linear,nn.Softmax], [(9,18),(9,)], 171),
         ([{"linear": {"in_features": 9, "out_features": 18, "bias": False}, "kaiming_uniform": {}}, {"sigmoid": {}}], 
-         {"sgd": {"lr": 0.1}},
+         {"sgd": {"lr": 0.1}}, "cpu",
          [nn.Linear,nn.Sigmoid], [(18,9)], 162),
         ([{"linear": {"in_features": 4, "out_features": 8}}, {"tanh": {}},
-          {"linear": {"in_features": 8, "out_features": 16}}, {"tanh": {}}], {"sgd": {"lr": 0.1}},
+          {"linear": {"in_features": 8, "out_features": 16}}, {"tanh": {}}], {"sgd": {"lr": 0.1}}, None,
          [nn.Linear,nn.Tanh] * 2, [(8,4),(8,), (16,8),(16,)], 184),
         ([{"linear": {"in_features": 3, "out_features": 3, "bias": False}}, {"relu": {}},
           {"linear": {"in_features": 3, "out_features": 3}}, {"tanh": {}},
           {"linear": {"in_features": 3, "out_features": 3, "bias": False}, "xavier_uniform": {}}, {"softmax": {"dim": -1}}
-          ], {"sgd": {"lr": 0.1}},
+          ], {"sgd": {"lr": 0.1}}, None,
          [nn.Linear,nn.ReLU, nn.Linear,nn.Tanh, nn.Linear,nn.Softmax], [(3,3), (3,3),(3,), (3,3)], 30),
         ([{"embedding": {"num_embeddings": 18, "embedding_dim": 2}}, {"flatten": {}},
           {"linear": {"in_features": 6, "out_features": 20}}, {"tanh": {}},
           {"linear": {"in_features": 20, "out_features": 18, "bias": False}}, {"softmax": {"dim": -1}},
-          ], {"sgd": {"lr": 0.1}},
+          ], {"sgd": {"lr": 0.1}}, None,
          [nn.Embedding,nn.Flatten, nn.Linear,nn.Tanh, nn.Linear,nn.Softmax], [(18,2),(20,6),(20,), (18,20)], 536),
         ([{"embedding": {"num_embeddings": 18, "embedding_dim": 2}}, {"flatten": {}},
           {"linear": {"in_features": 6, "out_features": 20}}, {"batchnorm1d": {"num_features": 20}}, {"tanh": {}},
           {"linear": {"in_features": 20, "out_features": 18, "bias": False}, "confidence": 0.1}, {"softmax": {"dim": -1}},
-          ], {"sgd": {"lr": 0.1}},
+          ], {"sgd": {"lr": 0.1}}, None,
          [nn.Embedding,nn.Flatten, nn.Linear,nn.BatchNorm1d,nn.Tanh, nn.Linear,nn.Softmax],
          [(18,2),(20,6),(20,),(20,),(20,),(18,20)], 576),
         ([{"embedding": {"num_embeddings": 18, "embedding_dim": 2}}, {"flatten": {}},
           {"linear": {"in_features": 6, "out_features": 10}}, {"tanh": {}},
           {"linear": {"in_features": 10, "out_features": 18}}, {"dropout": {"p": 0.1}},{"softmax": {"dim": -1}},
-         ], {"sgd": {"lr": 0.1}},
+         ], {"sgd": {"lr": 0.1}}, None,
          [nn.Embedding,nn.Flatten, nn.Linear,nn.Tanh, nn.Linear,nn.Dropout,nn.Softmax],
          [(18,2),(10,6),(10,),(18,10),(18,)], 304),
         ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
-                         {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}], {"adam": {"lr": 3e-4}},
+                         {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}], {"adam": {"lr": 3e-4}}, None,
          [nnl.Summation],
          [(27, 4), (8, 4)], 140),
         ([{"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
                           {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8},
                            "normal": {"std": 0.2}, "zeros": {}}]}
-          ], {"adamw": {"lr": 3e-4}},
+          ], {"adamw": {"lr": 3e-4}}, None,
          [nn.Sequential],
          [(4,), (12, 4), (12,), (4, 4), (4,)], 84),
         ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
@@ -66,16 +68,19 @@ class TestNeuralNetModel(unittest.TestCase):
                              {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
                              {"dropout": {"p": 0.2}}]}]}] * 2 +
         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
-         {"softmaxlast": {"dim": -1}}], {"adamw": {"lr": 3e-4}},
+         {"softmaxlast": {"dim": -1}}], {"adamw": {"lr": 3e-4}}, "cpu",
          [nnl.Summation,nn.Dropout] + [nnl.ResidualConnection] * 2 + [nn.LayerNorm,nn.Linear,nnl.SoftmaxOnLast],
          [(27, 4), (8, 4)] + [(4,), (12, 4), (4, 4), (4,), (16, 4), (4, 16)] * 2 + [(4,), (27, 4)], 652),
     ])
-    def test_model_init(self, layers: list[dict], optimizer: dict,
+    def test_model_init(self, layers: list[dict], optimizer: dict, device: str,
                         expected_layers: list[nn.Module], expected_shapes: list[list[tuple]], expected_buffer_size: int):
 
-        model = NeuralNetworkModel("test", Mapper(layers, optimizer))
+        model = NeuralNetworkModel("test", Mapper(layers, optimizer), device)
 
         self.assertEqual("test", model.model_id)
+        self.assertEqual(device, model.device)
+        if device:
+            self.assertEqual(torch.device(device), next(model.parameters()).device)
         self.assertListEqual(expected_layers, [l.__class__ for l in model.layers])
         self.assertListEqual(expected_shapes, [tuple(p.shape) for p in model.parameters()])
         self.assertTrue(model.optimizer.__class__.__name__.lower() in optimizer.keys())
@@ -192,25 +197,25 @@ class TestNeuralNetModel(unittest.TestCase):
         self.assertFalse(model.layers.training)
 
     @parameterized.expand([
-        ([{"linear": {"in_features": 9, "out_features": 9}}, {"softmax": {"dim": 1}}], {"sgd": {"lr": 0.1}},
+        ([{"linear": {"in_features": 9, "out_features": 9}}, {"softmax": {"dim": 1}}], {"sgd": {"lr": 0.1}}, None,
          [[1.0] + [0.0] * 8] * 90, [4] * 90, 3, None),
         ([{"linear": {"in_features": 9, "out_features": 18}}, {"tanh": {}},
-          {"linear": {"in_features": 18, "out_features": 9}}, {"tanh": {}}] * 2, {"adam": {"lr": 0.1}},
+          {"linear": {"in_features": 18, "out_features": 9}}, {"tanh": {}}] * 2, {"adam": {"lr": 0.1}}, None,
          [[0.5] * 9] * 702, [[0.5] * 9] * 702, 4, 20),
         ([{"linear": {"in_features": 9, "out_features": 18, "bias": False}}, {"tanh": {}},
-          {"linear": {"in_features": 18, "out_features": 9}}, {"tanh": {}}] * 2, {"adamw": {"lr": 0.1}},
+          {"linear": {"in_features": 18, "out_features": 9}}, {"tanh": {}}] * 2, {"adamw": {"lr": 0.1}}, "cpu",
          [[0.5] * 9] * 666, [[0.5] * 9] * 666, 5, 40),
         ([{"linear": {"in_features": 4, "out_features": 8}}, {"tanh": {}},
-          {"linear": {"in_features": 8, "out_features": 16}}, {"softmax": {"dim": 1}}], {"sgd": {"lr": 0.1}},
+          {"linear": {"in_features": 8, "out_features": 16}}, {"softmax": {"dim": 1}}], {"sgd": {"lr": 0.1}}, "cpu",
          [[0.5] * 4] * 184, [13] * 184, 5, 32),
         ([{"linear": {"in_features": 4, "out_features": 8}}, {"tanh": {}},
           {"linear": {"in_features": 8, "out_features": 16, "bias": False}}, {"softmax": {"dim": 1}}],
-         {"sgd": {"lr": 0.01}},
+         {"sgd": {"lr": 0.01}}, None,
          [[0.5] * 4] * 168, [13] * 168, 3, 48),
         ([{"embedding": {"num_embeddings": 18, "embedding_dim": 2}}, {"flatten": {}},
           {"linear": {"in_features": 6, "out_features": 10}}, {"batchnorm1d": {"num_features": 10}}, {"tanh": {}},
           {"linear": {"in_features": 10, "out_features": 18}}, {"dropout": {"p": 0.1}}, {"softmax": {"dim": 1}}],
-         {"adamw": {"lr": 0.1, "betas": [0.99, 0.9999], "eps": 1e-9, "weight_decay": 1e-1}},
+         {"adamw": {"lr": 0.1, "betas": [0.99, 0.9999], "eps": 1e-9, "weight_decay": 1e-1}}, "cpu",
          [[0, 5, 8],[1, 3, 7]] * 162, [2, 4] * 162, 5, 32),
         ([{"summation": [{"embedding": {"num_embeddings": 27, "embedding_dim": 4}},
                          {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}, {"dropout": {"p": 0.2}}] +
@@ -223,16 +228,16 @@ class TestNeuralNetModel(unittest.TestCase):
                              {"dropout": {"p": 0.2}}]}]}] * 2 +
          [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
           {"softmaxlast": {"dim": -1}}],
-         {"adamw": {"lr": 3e-4}},
+         {"adamw": {"lr": 3e-4}}, "cpu",
          [[1,12,21,5,8,10,5,17]] * 768, [[12,21,5,8,10,5,17,21]] * 768, 5, 64)
     ])
-    def test_train(self, layers: list[dict], optimizer: dict, input_data: list, target: list,
+    def test_train(self, layers: list[dict], optimizer: dict, device: str, input_data: list, target: list,
                    epochs: int, batch_size: int | None):
         # clean up any persisted previous test model
         NeuralNetworkModel.delete("test")
 
         # create model
-        model = NeuralNetworkModel("test", Mapper(layers, optimizer))
+        model = NeuralNetworkModel("test", Mapper(layers, optimizer), device)
 
         # record initial conditions
         initial_params = [p.tolist() for p in model.parameters()]
@@ -295,6 +300,10 @@ class TestNeuralNetModel(unittest.TestCase):
         self.assertEqual(persisted_model.avg_cost_history, model.avg_cost_history)
         self.assertEqual(persisted_model.stats, model.stats)
         self.assertEqual(persisted_model.status, model.status)
+        self.assertEqual(persisted_model.device, model.device)
+        if persisted_model.device:
+            self.assertEqual(torch.device(persisted_model.device), next(persisted_model.parameters()).device)
+
 
     def test_train_with_insufficient_data(self):
         # Test that training does not proceed when data is less than the buffer size
