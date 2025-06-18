@@ -37,7 +37,8 @@ def test_create_model_endpoint(mock_new_model):
             {"linear": {"in_features": 9, "out_features": 9}, "xavier_uniform": {}, "confidence": 0.9},
             {"sigmoid": {}},
         ] * 2,
-        "optimizer": {"sgd": {"lr": 0.1}}
+        "optimizer": {"sgd": {"lr": 0.1}},
+        "device": "cpu",
     }
 
     response = client.post("/model/", json=payload)

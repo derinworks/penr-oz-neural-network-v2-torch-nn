@@ -19,15 +19,20 @@ MODELS_FOLDER = "models"
 
 
 class NeuralNetworkModel(nn.Module):
-    def __init__(self, model_id: str, mapper: Mapper):
+    def __init__(self, model_id: str, mapper: Mapper, device: str=None):
         """
         Initialize a neural network with multiple layers.
         :param mapper: maps layer creation, initialization and optimizer creation
+        :param device: name of device to move to
         """
         super().__init__()
         self.model_id = model_id
         self.mapper = mapper
+        self.device = device
         self.layers = nn.ModuleList(self.mapper.to_layers())
+        if device:
+            self.to(device)
+            log.info(f"Moved model {model_id} to device {device}")
         self.optimizer: Optimizer = self.mapper.to_optimizer(self.parameters())
         self.progress = []
         self.training_data_buffer: list[Tuple[list, list | int]] = []
@@ -61,6 +66,7 @@ class NeuralNetworkModel(nn.Module):
         model_path = self.get_model_path(self.model_id)
         model_data = {
             "layers": self.mapper.layers,
+            "device": self.device,
             "state": self.state_dict(),
             "optim": self.mapper.optimizer,
             "optim_state": self.optimizer.state_dict(),
@@ -94,6 +100,10 @@ class NeuralNetworkModel(nn.Module):
             log.info(f"Created model {model_id}")
             model.load_state_dict(data["state"])
             log.info(f"Loaded state into model {model_id}")
+            model.device = data["device"]
+            if model.device:
+                model.to(model.device)
+                log.info(f"Moved model {model_id} to device {model.device}")
             model.optimizer.load_state_dict(data["optim_state"])
             log.info(f"Loaded optimizer for model {model_id}")
             model.progress = data["progress"]
