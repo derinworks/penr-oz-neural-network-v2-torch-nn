@@ -1,8 +1,9 @@
+import os.path
 import unittest
 from parameterized import parameterized
 import numpy as np
 import torch.nn as nn
-from neural_net_model import NeuralNetworkModel
+from neural_net_model import NeuralNetworkModel, SHM_PATH
 from mappers import Mapper
 import neural_net_layers as nnl
 
@@ -355,6 +356,18 @@ class TestNeuralNetModel(unittest.TestCase):
     def test_invalid_delete(self):
         # No error raised for failing to delete
         NeuralNetworkModel.delete("nonexistent")
+
+    def test_cache_miss(self):
+        model_path = NeuralNetworkModel.get_model_path("test")
+        model_in_shm_path = os.path.join(SHM_PATH, model_path)
+        os.remove(model_in_shm_path)
+
+        self.assertFalse(os.path.exists(model_in_shm_path))
+
+        model = NeuralNetworkModel.deserialize("test")
+
+        self.assertIsNotNone(model)
+        self.assertTrue(os.path.exists(model_in_shm_path))
 
 
 if __name__ == '__main__':
