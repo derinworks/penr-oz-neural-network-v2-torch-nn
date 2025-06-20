@@ -1,4 +1,6 @@
 import asyncio
+import gzip
+import json
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
@@ -101,6 +103,29 @@ def test_evaluate_endpoint(mock_deserialized_model, input_data, target, epochs, 
 
     assert response.status_code == 200
 
+def test_evaluate_endpoint_with_gzip(mock_deserialized_model):
+    cost = 1.234
+    mock_deserialized_model.evaluate_model.return_value = cost
+
+    payload = {
+        "model_id": "test",
+        "input": [[0.0, 0.0, 0.0]] * 10,
+        "target": [1] * 10,
+        "epochs": 3,
+        "batch_size": 3,
+    }
+
+    compressed_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
+
+    response = client.post("/evaluate/", content=compressed_payload,
+                           headers={"Content-Encoding": "gzip","Content-Type": "application/json"})
+
+    assert response.json() == {
+        "cost": cost,
+    }
+
+    assert response.status_code == 200
+
 @pytest.mark.parametrize("input_context, block_size, max_new_tokens, tokens", [
     ([[0]], 8, 2, [0, 1, 2]),
     ([[0, 1]], 4, 2, [0, 1, 2, 3]),
@@ -157,6 +182,22 @@ def test_train_endpoint_returns_409_when_already_locked(mock_deserialized_model)
 
     # Clean up after test
     del model_locks["test"]
+
+def test_train_endpoint_with_gzip(mock_deserialized_model):
+    payload = {
+        "model_id": "test",
+        "input": [0, 0, 0],
+        "target": [0, 1, 0],
+        "epochs": 2,
+    }
+
+    compressed_payload = gzip.compress(json.dumps(payload).encode("utf-8"))
+
+    response = client.put("/train/", content=compressed_payload,
+                          headers={"Content-Encoding": "gzip","Content-Type": "application/json"})
+
+    assert response.status_code == 202
+    assert response.json() == {"message": "Training for model test started asynchronously."}
 
 def test_progress_endpoint(mock_deserialized_model):
     mock_deserialized_model.progress = [

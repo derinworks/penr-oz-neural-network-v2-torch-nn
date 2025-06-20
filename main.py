@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from asyncio import Lock, create_task
 from typing import Dict
+import gzip
 from mappers import Mapper
 from neural_net_model import NeuralNetworkModel
 
@@ -169,6 +170,19 @@ class TrainingRequest(EvaluateRequest):
 class ModelIdQuery(Query):
     description="The unique identifier for the model"
 
+
+@app.middleware("http")
+async def gzip_decompression_middleware(request: Request, call_next):
+    if request.headers.get("Content-Encoding", "").lower() == "gzip":
+        body = await request.body()
+        log.info(f"Retrieved gzip encoded request body")
+        decompressed_body = gzip.decompress(body)
+        log.info(f"Decompressed gzip encoded body")
+        request._body = decompressed_body
+        async def decompressed_receive(): # pragma: no cover
+            return {"type": "http.request", "body": decompressed_body, "more_body": False}
+        request._receive = decompressed_receive
+    return await call_next(request)
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(_: Request, e: Exception):
