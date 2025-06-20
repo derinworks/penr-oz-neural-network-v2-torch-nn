@@ -6,6 +6,7 @@ import shutil
 from typing import Tuple, Callable
 import time
 from datetime import datetime as dt
+import numpy as np
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -255,7 +256,10 @@ class NeuralNetworkModel(nn.Module):
             log.info(f"Model {self.model_id}: Insufficient training data. "
                   f"Current buffer size: {current_buffer_size}, "
                   f"required: {self.training_buffer_size}")
-            self.serialize() # serialize model with partial training data for next time
+            input_item, target_item = self.training_data_buffer[0]
+            buffer_bytes = (np.array(input_item).nbytes + np.array(target_item).nbytes) * current_buffer_size
+            if buffer_bytes < 10*2**20: # less than 10MB small enough to serialize
+                self.serialize() # serialize model with partial training data for next time
             return
 
         # Proceed with training using combined data if buffer size is sufficient
