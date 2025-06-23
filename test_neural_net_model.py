@@ -1,3 +1,4 @@
+import math
 import os.path
 import time
 import unittest
@@ -53,8 +54,12 @@ class TestNeuralNetModel(unittest.TestCase):
          [nnl.Summation],
          [(27, 4), (8, 4)], 140),
         ([{"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                          {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8},
-                           "normal": {"std": 0.2}, "zeros": {}}]}
+                          {"linear": {"in_features": 4, "out_features": 12},
+                           "normal": {"std": 0.2}, "zeros": {}},
+                          {"attention": {"num_heads": 2}},
+                          {"linear": {"in_features": 4, "out_features": 4},
+                           "normal": {"std": 0.2}, "zeros": {}},
+                          ]}
           ], {"adamw": {"lr": 3e-4}}, None,
          [nn.Sequential],
          [(4,), (12, 4), (12,), (4, 4), (4,)], 84),
@@ -62,12 +67,20 @@ class TestNeuralNetModel(unittest.TestCase):
                          {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}, {"dropout": {"p": 0.2}}] +
          [{"residual": [
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+                             {"linear": {"in_features": 4, "out_features": 12, "bias": False}},
+                             {"attention": {"num_heads": 2, "dropout": 0.2}},
+                             {"linear": {"in_features": 4, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}
+                             ]},
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}},
+                             {"gelu": {}},
                              {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
-                             {"dropout": {"p": 0.2}}]}]}] * 2 +
-        [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+                             {"dropout": {"p": 0.2}}
+                             ]}]}
+             for _ in range(2)] +
+        [{"layernorm": {"normalized_shape": 4, "bias": False}},
+         {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
          {"softmaxlast": {"dim": -1}}], {"adamw": {"lr": 3e-4}}, "cpu",
          [nnl.Summation,nn.Dropout] + [nnl.ResidualConnection] * 2 + [nn.LayerNorm,nn.Linear,nnl.SoftmaxOnLast],
          [(27, 4), (8, 4)] + [(4,), (12, 4), (4, 4), (4,), (16, 4), (4, 16)] * 2 + [(4,), (27, 4)], 652),
@@ -112,12 +125,20 @@ class TestNeuralNetModel(unittest.TestCase):
                          {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}, {"dropout": {"p": 0.2}}] +
          [{"residual": [
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+                             {"linear": {"in_features": 4, "out_features": 12, "bias": False}},
+                             {"attention": {"num_heads": 2, "dropout": 0.2}},
+                             {"linear": {"in_features": 4, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}
+                             ]},
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}},
+                             {"gelu": {}},
                              {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
-                             {"dropout": {"p": 0.2}}]}]}] * 2 +
-         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+                             {"dropout": {"p": 0.2}}
+                             ]}]}
+             for _ in range(2)] +
+         [{"layernorm": {"normalized_shape": 4, "bias": False}},
+          {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
           {"softmaxlast": {"dim": -1}}], [[1,12,21,5,8,10,5,17]] * 5, [[12,21,5,8,10,5,17,21]] * 5),
     ])
     def test_compute_output(self, layers: list[dict], input_data: list, target: list | int | None):
@@ -149,12 +170,20 @@ class TestNeuralNetModel(unittest.TestCase):
           {"dropout": {"p": 0.2}}] +
          [{"residual": [
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+                             {"linear": {"in_features": 4, "out_features": 12, "bias": False}},
+                             {"attention": {"num_heads": 2, "dropout": 0.2}},
+                             {"linear": {"in_features": 4, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}
+                             ]},
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}},
+                             {"gelu": {}},
                              {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
-                             {"dropout": {"p": 0.2}}]}]}] * 2 +
-         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+                             {"dropout": {"p": 0.2}}
+                             ]}]}
+             for _ in range(2)] +
+         [{"layernorm": {"normalized_shape": 4, "bias": False}},
+          {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
           {"softmaxlast": {"dim": -1}}],
          [[1,12,21,5,8,10,5,17]] * 24, [[12,21,5,8,10,5,17,21]] * 24, 4, 3),
     ])
@@ -177,12 +206,19 @@ class TestNeuralNetModel(unittest.TestCase):
           {"dropout": {"p": 0.2}}] +
          [{"residual": [
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+                             {"linear": {"in_features": 4, "out_features": 12, "bias": False}},
+                             {"attention": {"num_heads": 2, "dropout": 0.2}},
+                             {"linear": {"in_features": 4, "out_features": 4, "bias": False}},
+                             {"dropout": {"p": 0.2}}
+                             ]},
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
+                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}},
+                             {"gelu": {}},
                              {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
-                             {"dropout": {"p": 0.2}}]}]}] * 2 +
-         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+                             {"dropout": {"p": 0.2}}]}]}
+             for _ in range(2)] +
+         [{"layernorm": {"normalized_shape": 4, "bias": False}},
+          {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
           {"softmaxlast": {"dim": -1}}],
          [[0]], 8, 10),
     ])
@@ -221,12 +257,24 @@ class TestNeuralNetModel(unittest.TestCase):
                          {"position": {"num_embeddings": 8, "embedding_dim": 4}}]}, {"dropout": {"p": 0.2}}] +
          [{"residual": [
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"attention": {"embedding_dim": 4, "num_heads": 2, "block_size": 8, "bias": False, "dropout": 0.2}}]},
+                             {"linear": {"in_features": 4, "out_features": 12},
+                              "normal": {"mean": 0.0, "std": 0.2}, "zeros": {}},
+                             {"attention": {"num_heads": 2, "dropout": 0.2}},
+                             {"linear": {"in_features": 4, "out_features": 4},
+                              "normal": {"mean": 0.0, "std": 0.2 / math.sqrt(2)}, "zeros": {}},
+                             {"dropout": {"p": 0.2}}
+                             ]},
              {"sequential": [{"layernorm": {"normalized_shape": 4, "bias": False}},
-                             {"linear": {"in_features": 4, "out_features": 16, "bias": False}}, {"gelu": {}},
-                             {"linear": {"in_features": 16, "out_features": 4, "bias": False}},
-                             {"dropout": {"p": 0.2}}]}]}] * 2 +
-         [{"layernorm": {"normalized_shape": 4, "bias": False}}, {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
+                             {"linear": {"in_features": 4, "out_features": 16},
+                              "normal": {"mean": 0.0, "std": 0.2}, "zeros": {}},
+                             {"gelu": {}},
+                             {"linear": {"in_features": 16, "out_features": 4},
+                              "normal": {"mean": 0.0, "std": 0.2 / math.sqrt(2)}, "zeros": {}},
+                             {"dropout": {"p": 0.2}}
+                             ]}]}
+             for _ in range(2)] +
+         [{"layernorm": {"normalized_shape": 4, "bias": False}},
+          {"linear": {"in_features": 4, "out_features": 27, "bias": False}},
           {"softmaxlast": {"dim": -1}}],
          {"adamw": {"lr": 3e-4}}, "cpu",
          [[1,12,21,5,8,10,5,17]] * 768, [[12,21,5,8,10,5,17,21]] * 768, 5, 64)

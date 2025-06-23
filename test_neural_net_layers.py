@@ -9,9 +9,8 @@ import neural_net_layers as nnl
 class TestNeuralNetLayers(unittest.TestCase):
 
     @parameterized.expand([
-        (nnl.CausalSelfAttention, dict(embedding_dim=4, num_heads=2, block_size=8)),
-        (nnl.CausalSelfAttention, dict(embedding_dim=4, num_heads=2, block_size=8, bias=False, dropout=0.2)),
-        (nnl.CausalSelfAttention, dict(embedding_dim=15, num_heads=3, block_size=5)),
+        (nnl.CausalSelfAttention, dict(num_heads=2)),
+        (nnl.CausalSelfAttention, dict(num_heads=2, dropout=0.2)),
         (nnl.PositionEmbedding, dict(num_embeddings=27, embedding_dim=4)),
         (nnl.Summation, [nn.Embedding(27, 4),
                          nnl.PositionEmbedding(8, 4)]),
@@ -24,17 +23,20 @@ class TestNeuralNetLayers(unittest.TestCase):
         self.assertIsInstance(layer, nn.Module)
 
     @parameterized.expand([
-        (nnl.CausalSelfAttention(4, 2, 8),
-         torch.randn(5, 8, 4), (5, 8, 4)),
-        (nnl.CausalSelfAttention(15, 3, 5, dropout=0.2),
-         torch.randn(5, 5, 15), (5, 5, 15)),
+        (nnl.CausalSelfAttention(2),
+         torch.randn(5, 8, 12), (5, 8, 4)),
+        (nnl.CausalSelfAttention(3, 0.2),
+         torch.randn(5, 5, 45), (5, 5, 15)),
         (nnl.PositionEmbedding(27, 4),
          torch.randint(0, 27, (5, 8)), (8, 4)),
         (nnl.Summation(nn.Embedding(27, 4),
                        nnl.PositionEmbedding(8, 4)),
          torch.randint(0, 27, (5, 8)), (5, 8, 4)),
         (nn.Sequential(nn.LayerNorm(4, bias=False),
-                       nnl.CausalSelfAttention(4, 2, 8, False, 0.2)),
+                       nn.Linear(4, 12, False),
+                       nnl.CausalSelfAttention(4, 0.2),
+                       nn.Linear(4, 4, False),
+                       nn.Dropout(0.2)),
          torch.randn(5, 8, 4), (5, 8, 4)),
         (nn.Sequential(
             nnl.Summation(nn.Embedding(27, 4),
@@ -43,13 +45,18 @@ class TestNeuralNetLayers(unittest.TestCase):
            *[nnl.ResidualConnection(
                nn.Sequential(
                    nn.LayerNorm(4, bias=False),
-                   nnl.CausalSelfAttention(4, 2, 8, False, 0.2)),
+                   nn.Linear(4, 12, False),
+                   nnl.CausalSelfAttention(4, 0.2),
+                   nn.Linear(4, 4, False),
+                   nn.Dropout(0.2)
+               ),
                nn.Sequential(
                    nn.LayerNorm(4, bias=False),
                    nn.Linear(4, 16, False),
                    nn.GELU(),
                    nn.Linear(16, 4, False),
-                  nn.Dropout(0.2))) for _ in range(2)],
+                  nn.Dropout(0.2)))
+               for _ in range(2)],
             nn.LayerNorm(4, bias=False),
             nn.Linear(4, 27, bias=False),
             nnl.SoftmaxOnLast(dim=-1)),

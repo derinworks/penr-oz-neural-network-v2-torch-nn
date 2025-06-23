@@ -253,12 +253,12 @@ class NeuralNetworkModel(nn.Module):
         # Check if buffer size is sufficient
         current_buffer_size = len(self.training_data_buffer)
         if current_buffer_size < self.training_buffer_size:
-            log.info(f"Model {self.model_id}: Insufficient training data. "
-                  f"Current buffer size: {current_buffer_size}, "
-                  f"required: {self.training_buffer_size}")
             input_item, target_item = self.training_data_buffer[0]
-            buffer_bytes = (np.array(input_item).nbytes + np.array(target_item).nbytes) * current_buffer_size
-            if buffer_bytes < 10*2**20: # less than 10MB small enough to serialize
+            buffer_megabytes = (np.array(input_item).nbytes + np.array(target_item).nbytes) * current_buffer_size / 2**20
+            log.info(f"Model {self.model_id}: Insufficient training data. "
+                  f"Current buffer size: {current_buffer_size} (~{buffer_megabytes:.2f}MB), "
+                  f"required: {self.training_buffer_size}")
+            if buffer_megabytes < 10: # less than 10MB small enough to serialize
                 self.serialize() # serialize model with partial training data for next time
             return
 
